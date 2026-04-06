@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// ===== PHASE A: SETUP =====
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
@@ -22,7 +22,7 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ===== PHASE B: DATA LAYER =====
+
 
 // Item Model with strong typing
 class Item {
@@ -60,7 +60,7 @@ class Item {
   }
 }
 
-// Firestore Service - typed API for the app
+
 class FirestoreService {
   static final _db = FirebaseFirestore.instance;
   static const _collection = 'items';
@@ -85,71 +85,132 @@ class FirestoreService {
   }
 }
 
-// ===== PHASE C: UI + UX =====
 
-class HomeScreen extends StatelessWidget {
+
+class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String searchQuery = '';
+  bool sortByQuantity = false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Inventory')),
-      body: StreamBuilder<List<Item>>(
-        stream: FirestoreService.streamItems(),
-        builder: (context, snapshot) {
-          // Loading state
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          // Error state
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          // Empty state
-          if (!snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text('No items yet'));
-          }
-
-          // List state
-          final items = snapshot.data!;
-          return ListView.builder(
-            itemCount: items.length,
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return ListTile(
-                title: Text(item.name),
-                subtitle: Text(item.description),
-                trailing: SizedBox(
-                  width: 100,
-                  child: Row(
-                    children: [
-                      Text('${item.quantity}x \$${item.price}'),
-                      PopupMenuButton(
-                        itemBuilder: (context) => [
-                          PopupMenuItem(
-                            child: const Text('Edit'),
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => EditScreen(item: item),
-                              ),
-                            ),
-                          ),
-                          PopupMenuItem(
-                            child: const Text('Delete'),
-                            onTap: () => FirestoreService.deleteItem(item.id!),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+      body: Column(
+        children: [
+          // Enhanced Feature 1: Search
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Search items...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              );
-            },
-          );
-        },
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+              onChanged: (value) => setState(() => searchQuery = value.toLowerCase()),
+            ),
+          ),
+          // Enhanced Feature 2: Sort toggle
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            child: Row(
+              children: [
+                Text(
+                  sortByQuantity ? 'Sorted by Quantity' : 'Sorted by Name',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => setState(() => sortByQuantity = !sortByQuantity),
+                  icon: const Icon(Icons.sort),
+                  label: const Text('Sort'),
+                ),
+              ],
+            ),
+          ),
+          // Items list
+          Expanded(
+            child: StreamBuilder<List<Item>>(
+              stream: FirestoreService.streamItems(),
+              builder: (context, snapshot) {
+                // Loading state
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                // Error state
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+
+                // Empty state
+                if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                  return const Center(child: Text('No items yet'));
+                }
+
+                // Filter by search query
+                var items = snapshot.data!
+                    .where((item) =>
+                        item.name.toLowerCase().contains(searchQuery) ||
+                        item.description.toLowerCase().contains(searchQuery))
+                    .toList();
+
+                // Sort
+                if (sortByQuantity) {
+                  items.sort((a, b) => b.quantity.compareTo(a.quantity));
+                } else {
+                  items.sort((a, b) => a.name.compareTo(b.name));
+                }
+
+                // List state
+                return ListView.builder(
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return ListTile(
+                      title: Text(item.name),
+                      subtitle: Text(item.description),
+                      trailing: SizedBox(
+                        width: 100,
+                        child: Row(
+                          children: [
+                            Text('${item.quantity}x \$${item.price}'),
+                            PopupMenuButton(
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  child: const Text('Edit'),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => EditScreen(item: item),
+                                    ),
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  child: const Text('Delete'),
+                                  onTap: () => FirestoreService.deleteItem(item.id!),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
